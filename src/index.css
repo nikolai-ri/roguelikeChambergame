@@ -1,0 +1,22 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif; }
+
+.gameBox {
+  position: relative;
+  width: 80rem;
+  height: 60rem;
+  border: 1px solid black; }
+  
+ .completeGameWrapper{
+ 	display: flex;
+    flex-direction: column;
+    align-content: center;
+    justify-content: center;
+    text-align: center;
+    width: 100vw;
+    height: 100vh;
+ }
+
+/*# sourceMappingURL=index.css.map */
