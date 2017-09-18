@@ -5,9 +5,8 @@ import './index.css';
 
 // implement next:
 
-// implement playerDeath
+// implement playerDeath (only parts in top level component implemented)
 // implement end of game
-// (score: points / time)
 // implement highscore list
 
 class Stats extends React.Component{
@@ -19,7 +18,9 @@ class Stats extends React.Component{
                 playerHealth: null,
                 currentWeapon: null,
                 dungenon: null,
-                playerPoints: null
+                playerPoints: null,
+                currentTime: null,
+                playerFinalPoints: null
         };
     }
     
@@ -28,23 +29,27 @@ class Stats extends React.Component{
             playerHealth: this.props.playerHealth,
             currentWeapon: this.props.currentWeapon,
             dungeon: this.props.dungeon,
-            playerPoints: this.props.playerPoints
+            playerPoints: this.props.playerPoints,
+            currentTime: this.props.currentTime,
+            playerFinalPoints: this.props.playerFinalPoints
         });
     }
     
-    componentWillReceiveProps(nextState){
+    componentWillReceiveProps(nextState){   
         this.setState({
             playerHealth: nextState.playerHealth,
             currentWeapon: nextState.currentWeapon,
             dungeon: nextState.dungeon,
-            playerPoints: nextState.playerPoints
+            playerPoints: nextState.playerPoints,
+            currentTime: nextState.currentTime,
+            playerFinalPoints: nextState.playerFinalPoints
         });
     }
     
     render(){
         
         return(
-                <div><span>{"Current Player Points: " + this.state.playerPoints + "| Current Playerhealth: " + this.state.playerHealth + " | Current Weapon: " + this.state.currentWeapon + " | Current Dungeon: " + this.state.dungeon}</span></div>
+                <div><span>{"Current Player Points: " + this.state.playerPoints + "| Current Playerhealth: " + this.state.playerHealth + " | Current Weapon: " + this.state.currentWeapon + " | Current Dungeon: " + this.state.dungeon + " | Current Time: " + this.state.currentTime + " | Final Points: " + this.state.playerFinalPoints}</span></div>
         );
     }
 }
@@ -89,13 +94,13 @@ class Map extends React.Component{
 
         // no final enemy in the first two dungeons
         if(this.state.dungeon <= 2){
-            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[2]);
+            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[3]);
             this.setState({
                 Game: this.createGameObject(false)
             }, () => this.state.Game.init());
                         
         } else if(this.state.dungeon === 3){
-            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[2]);
+            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[3]);
             this.setState({
                 Game: this.createGameObject(true)
             }, () => this.state.Game.init());
@@ -636,14 +641,25 @@ class Game extends React.Component{
     constructor(props){
         super(props);
         
+        
+        
         this.state = {
-                playerHealth: 40,
+                playerHealth: 100,
                 weapons: ["Knife", "Baseball Bat", "Colt", "P90", "MG5", "AK47", "Flamethrower", "Bazooka", "Energy Weapon"],
                 currentWeapon: 0,
                 dungeon: 1,
                 playerPoints: 0,
+                playerFinalPoints: null,
+                currentTime: 0,
+                stopGame: false,
                 referenceGameObj: this
         }
+        
+    }
+    
+    componentWillMount(){
+        this.setCurrentTime();
+
     }
 
     
@@ -684,13 +700,39 @@ class Game extends React.Component{
         
         referenceGameObj.setState((prevState) => ({
             dungeon: (prevState.dungeon + 1)
-        }), () => console.log(referenceGameObj.state.dungeon));
+        }));
     }
     
     handlePlayerPointsUp(referenceGameObj){
         referenceGameObj.setState((prevState) => ({
-            playerPoints: prevState.playerPoints + 1
+            playerPoints: prevState.playerPoints + 5
         }));
+    }
+    
+    setCurrentTime(){
+        
+        if(this.state.currentTime > 0){
+            this.setState({
+                playerFinalPoints: Math.floor(parseInt(this.state.playerPoints, 10) / parseInt(this.state.currentTime, 10))
+            });
+        }
+        
+        
+        if(this.state.playerHealth === 0 || this.state.stopGame) {
+            alert("You have lost my friend!");
+            return;
+        }
+        else{
+            this.setState({
+                currentTime: this.state.currentTime + 1
+            }, () => setTimeout(() => this.setCurrentTime(), 1000));
+        }
+    }
+    
+    stopGame(){
+        this.setState({
+            stopGame: true
+        });
     }
     
     
@@ -703,7 +745,9 @@ class Game extends React.Component{
                                currentWeapon={this.state.weapons[this.state.currentWeapon]} 
                                playerHealth={this.state.playerHealth} 
                                dungeon={this.state.dungeon}
-                               playerPoints={this.state.playerPoints}/>
+                               playerPoints={this.state.playerPoints}
+                               currentTime={this.state.currentTime}
+                               playerFinalPoints={this.state.playerFinalPoints}/>
                         <Map key="theActualGame" 
                              ref="theRefActualGame" 
                              currentWeapon={this.state.weapons[this.state.currentWeapon]} 
@@ -714,6 +758,7 @@ class Game extends React.Component{
                              onNewDungeon={this.jumpToNewDungeon}
                              playerPoints={this.state.playerPoints}
                              handlePlayerPointsUp={this.handlePlayerPointsUp}/>
+                       <button onClick={this.stopGame.bind(this)}>Stop that Game</button>
                     </div>
             );
         }
