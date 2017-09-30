@@ -15,12 +15,15 @@ class Stats extends React.Component{
         super(props);
         
         this.state = {
-                playerHealth: null,
-                currentWeapon: null,
-                dungenon: null,
-                playerPoints: null,
-                currentTime: null,
-                playerFinalPoints: null
+                playerHealth: 0,
+                currentWeapon: "Knife",
+                dungeon: 1,
+                playerPoints: 0,
+                currentTime: 0,
+                playerFinalPoints: 0,
+                playerHealthStyle: {},
+                headLineStyle: {},
+                gameRestarted: false
         };
     }
     
@@ -31,7 +34,14 @@ class Stats extends React.Component{
             dungeon: this.props.dungeon,
             playerPoints: this.props.playerPoints,
             currentTime: this.props.currentTime,
-            playerFinalPoints: this.props.playerFinalPoints
+            playerFinalPoints: this.props.playerFinalPoints,
+            playerHealthStyle: {
+                color: "green"
+            },
+            headLineStyle: {
+                fontSize: "2rem"
+            },
+            gameRestarted: this.props.gameRestarted
         });
     }
     
@@ -42,14 +52,51 @@ class Stats extends React.Component{
             dungeon: nextState.dungeon,
             playerPoints: nextState.playerPoints,
             currentTime: nextState.currentTime,
-            playerFinalPoints: nextState.playerFinalPoints
-        });
+            playerFinalPoints: nextState.playerFinalPoints,
+            gameRestarted: nextState.gameRestarted
+        }, () => this.resetGame());
+        
+        this.setPlayerHealthColor();
+    }
+    
+    resetGame(){
+        if(this.state.gameRestarted === true){
+            this.setState({
+                playerHealthStyle: {color:"green"},
+                gameRestarted: false
+            });
+        }
+    }
+    
+    setPlayerHealthColor(){
+        if(this.state.playerHealth > 66){
+            this.setState({
+                playerHealthStyle: {
+                    color: "green"
+                }
+            });
+        } else if (this.state.playerHealth > 33){
+            this.setState({
+                playerHealthStyle: {
+                    color: "yellow",
+                    backgroundColor: "black"
+                        
+                }
+            });
+        } else {
+            this.setState({
+                playerHealthStyle: {
+                    color: "red",
+                    backgroundColor: "black"
+                }
+            });
+        }
     }
     
     render(){
         
         return(
-                <div><span>{"Current Player Points: " + this.state.playerPoints + "| Current Playerhealth: " + this.state.playerHealth + " | Current Weapon: " + this.state.currentWeapon + " | Current Dungeon: " + this.state.dungeon + " | Current Time: " + this.state.currentTime + " | Final Points: " + this.state.playerFinalPoints}</span></div>
+                <div><span style={this.state.headLineStyle}>{"Current Player Points: " + this.state.playerPoints}| Current Playerhealth: <span style={this.state.playerHealthStyle}>{this.state.playerHealth}</span>{" | Current Weapon: " + this.state.currentWeapon + " | Current Dungeon: " + this.state.dungeon + " | Current Time: " + this.state.currentTime + " | Final Points: " + this.state.playerFinalPoints}</span></div>
         );
     }
 }
@@ -94,18 +141,42 @@ class Map extends React.Component{
 
         // no final enemy in the first two dungeons
         if(this.state.dungeon <= 2){
-            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[3]);
+            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[4]);
             this.setState({
                 Game: this.createGameObject(false)
             }, () => this.state.Game.init());
                         
         } else if(this.state.dungeon === 3){
-            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[3]);
+            document.getElementById("completeGameWrapperId").removeChild(document.getElementById("completeGameWrapperId").childNodes[4]);
             this.setState({
                 Game: this.createGameObject(true)
             }, () => this.state.Game.init());
         }
         
+    }
+    
+    stopGame(thisRef){
+        let that = this;
+        return new Promise(function(resolve, reject){
+            thisRef.state.Game.engine.unlock();
+            window.removeEventListener("keydown", thisRef.state.Game.player);
+            that.setState({
+                Game: {
+                    display: null,
+                    doorway: null,
+                    enemies: null,
+                    engine: null,
+                    fieldOfView: null,
+                    finalEnemy: null,
+                    health: null,
+                    map: null,
+                    player: null,
+                    schedulerRef: null,
+                    weapons: null
+                },
+                referenceGameObject: null
+            }, () => resolve("done"));
+        });
     }
    
     
@@ -121,13 +192,15 @@ class Map extends React.Component{
             // this boolean is used as a flag, to catch the case, that the finalenemy is closer then 2 boxes from the player. Then it is set to true, and the player cannot move more then 5 boxes around the final enemy.
             this.gotCaught = false;
             this._draw();
+            this.removeEventListener;
 
         }
         
         // In the prototype so valid for every newly created player.
         Player.prototype._draw = function(){
-            // Draw the symbol with color blue to position x and y.
+            // saves the string player to the map object, so stuff can be made with this position if necessary
             that.state.Game.map[this._x + "," + this._y] = "player";
+            // Draw the symbol with color blue to position x and y.
             that.state.Game.display.draw(this._x, this._y, "", "", "blue");
         }
         
@@ -138,8 +211,15 @@ class Map extends React.Component{
             window.addEventListener("keydown", this);
         }
         
+        Player.prototype.removeEventListener = function(){
+            window.removeEventListener("keydown", this);
+            that.state.Game.engine.unlock();
+        }
+        
         // Handles all the events connected to the player such as fighting and moving
         Player.prototype.handleEvent= function(e){
+            
+            if(that.state.Game === null) return;
             
             let keyMap = {};
             keyMap[38] = 0;
@@ -170,7 +250,7 @@ class Map extends React.Component{
             // do not move in this direction, if there is a wall there
             if(!(newKey in that.state.Game.map)) {
                 window.removeEventListener("keydown", this);
-                that.state.Game.engine.unlock();
+                that.state.Game.engine.unlock(that.state.referenceGameObject);
                 return;
             }
             
@@ -178,77 +258,61 @@ class Map extends React.Component{
             
             if(that.state.Game.map[newKey] === "enemy" || that.state.Game.map[newKey] === "finalEnemy") {
                 
+                that.props.onGameWrapperStylingChange(that.state.referenceGameObject);
+                
                 if(this.currentWeapon === "Knife"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 5; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 5; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "Baseball Bat"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 10; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 10; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "Colt"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 15; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 15; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "P90"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 20; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 20; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "MG5"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 25; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 25; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "AK47"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 30; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 30; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "Flamethrower"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 35;
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 35; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "Bazooka"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 40; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 40; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } else if(this.currentWeapon === "Energy Weapon"){
                     if(that.state.Game.map[newKey] === "enemy"){
                         that.state.Game.enemies[newKey].health -= 50; 
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     } else {
                         that.state.Game.finalEnemy.health -= 50;
-                        that.props.handlePlayerPointsUp(that.state.referenceGameObject);
                     }
                 } 
                    
@@ -263,7 +327,7 @@ class Map extends React.Component{
                     if(that.state.Game.finalEnemy.health <= 0){
                         that.state.Game.map[newKey] = "";
                         delete that.state.Game.enemies[newKey];
-                        alert("Congratulations! You defeated the final enemy :-)!");
+                        that.props.onFinalEnemyKilled(that.state.referenceGameObject);
                     }
                 }
                 
@@ -292,11 +356,11 @@ class Map extends React.Component{
             }
             
             else if(that.state.Game.map[newKey] === "doorway"){
-
-                this._playerJumpToNextDungeon(that.state.referenceGameObject);
-                that._reloadMap();
                 window.removeEventListener("keydown", this);
                 that.state.Game.engine.unlock();
+                this._playerJumpToNextDungeon(that.state.referenceGameObject);
+                that._reloadMap();
+                
                 return;
            }
 
@@ -339,7 +403,6 @@ class Map extends React.Component{
                 });
 
                 that.state.Game.player.gotCaught = false;  
-                console.log(that.state.Game.map);
             }
             
             
@@ -475,11 +538,12 @@ class Map extends React.Component{
                 engine: null,
                 schedulerRef: null,
                 numberOfEnemiesPerChamber: 15,
-                numberOfHealthsPerChamber: 3,
+                numberOfHealthsPerChamber: 5,
                 fieldOfView: null,
                 init: function(){
+                    this._clearMap();
                     this.display = new ROT.Display({width:120, height:50, fontSize:16, bg: "#24281e"});
-
+                    
                     // This works around the usual way of rendering components in React. Unfortunately getContainer() returns
                     // an object, which is not renderable with react. While its not perfect, it should not be too much of a problem
                     // because there is no fast rerendering involved.
@@ -499,7 +563,6 @@ class Map extends React.Component{
                     this.engine.start();
                 },
                 _generateMap: function(){
-                    
                     let that = this;
                     
                     // Object which is responsible to digg the actual map.
@@ -525,7 +588,6 @@ class Map extends React.Component{
                     
                     // draws the map without a limited field of view
                     //this._drawWholeMap(freeCells);
-                    
                     
                     //this generates Boxes and later randomly spreads enemies across the field of freecells
                     this._generateEnemies(freeCells);
@@ -562,6 +624,12 @@ class Map extends React.Component{
                     });
                     this.player._draw();
                     
+                },
+                _clearMap: function(){
+
+                    Object.keys(this.map).forEach(function(element){
+                        delete this.map[element];
+                    });
                 },
                 _generateEnemies: function(freeCells){
                     for (let i = 0; i < this.numberOfEnemiesPerChamber; i++){
@@ -640,26 +708,26 @@ class Game extends React.Component{
     
     constructor(props){
         super(props);
-        
-        
-        
+           
         this.state = {
                 playerHealth: 100,
                 weapons: ["Knife", "Baseball Bat", "Colt", "P90", "MG5", "AK47", "Flamethrower", "Bazooka", "Energy Weapon"],
                 currentWeapon: 0,
                 dungeon: 1,
                 playerPoints: 0,
-                playerFinalPoints: null,
+                playerFinalPoints: 0,
                 currentTime: 0,
                 stopGame: false,
-                referenceGameObj: this
+                referenceGameObj: this,
+                gameWrapperStyling: "completeGameWrapper",
+                gameRestarted: false,
+                popupContent: null
         }
         
     }
     
     componentWillMount(){
         this.setCurrentTime();
-
     }
 
     
@@ -670,24 +738,24 @@ class Game extends React.Component{
                 referenceGameObj.setState((prevState) => ({
                     playerHealth: (prevState.playerHealth - 5)
                 }), () => res(objectToFight));
+                referenceGameObj.handlePlayerPointsUp(referenceGameObj, 5);
             } else if (objectToFight === "finalEnemy"){
                 referenceGameObj.setState((prevState) => ({
-                    playerHealth: (prevState.playerHealth - 40)
+                    playerHealth: (prevState.playerHealth - 20)
                 }), () => res(objectToFight));
+                referenceGameObj.handlePlayerPointsUp(referenceGameObj, 40);
             } else if(objectToFight === "weapon"){
                 if(referenceGameObj.state.currentWeapon < referenceGameObj.state.weapons.length){
                     referenceGameObj.setState((prevState) => ({
                         currentWeapon: prevState.currentWeapon + 1
                     }), () => res(objectToFight));
+                    referenceGameObj.handlePlayerPointsUp(referenceGameObj, 5);
                 }
-            } else if(objectToFight === "finalEnemy"){
-                referenceGameObj.setState((prevState) => ({
-                    playerHealth: (prevState.playerHealth - 20)
-                }), () => res(objectToFight));
             } else if(objectToFight === "health"){
                 referenceGameObj.setState((prevState) => ({
                     playerHealth: (prevState.playerHealth + 30)
                 }), () => res(objectToFight));
+                referenceGameObj.handlePlayerPointsUp(referenceGameObj, 5);
             } 
             
         });
@@ -703,25 +771,38 @@ class Game extends React.Component{
         }));
     }
     
-    handlePlayerPointsUp(referenceGameObj){
+    handlePlayerPointsUp(referenceGameObj, up){
         referenceGameObj.setState((prevState) => ({
-            playerPoints: prevState.playerPoints + 5
+            playerPoints: prevState.playerPoints + up
         }));
+    }
+    
+    handleFinalEnemyKilled(referenceGameObj){
+        referenceGameObj.setState({
+            popContent: "Congratulations, you have killed the final enemy!\nYour final score is: " + referenceGameObj.state.playerFinalPoints + "\nGo faster next time, to get an even higher score!"
+        }, () => referenceGameObj.showPopup());
     }
     
     setCurrentTime(){
         
         if(this.state.currentTime > 0){
             this.setState({
-                playerFinalPoints: Math.floor(parseInt(this.state.playerPoints, 10) / parseInt(this.state.currentTime, 10))
+                playerFinalPoints: Math.floor(parseInt(this.state.playerPoints, 10) / (parseInt(this.state.currentTime, 10) / 3))
             });
         }
         
         
-        if(this.state.playerHealth === 0 || this.state.stopGame) {
-            alert("You have lost my friend!");
+        if(this.state.playerHealth <= 0 && this.state.gameRestarted === false) {
+            this.setState({
+                popupContent: "You have lost my friend! :-("
+            }, () => this.showPopup());
             return;
         }
+        
+        if (this.state.stopGame === true) {
+            return;
+        }
+        
         else{
             this.setState({
                 currentTime: this.state.currentTime + 1
@@ -730,16 +811,56 @@ class Game extends React.Component{
     }
     
     stopGame(){
+        this.showPopup();
         this.setState({
             stopGame: true
-        });
+        }, this.setState({
+            stopGame: false,
+            referenceGameObj: null
+            }, () => this.refs.theRefActualGame.stopGame(this.refs.theRefActualGame)));
+    }
+    
+    showPopup(){
+        this.refs.endOfGamePop.classList.toggle("show");
+    }
+    
+    restartThisGame(){
+        this.showPopup();
+
+        this.setState({
+            playerHealth: 100,
+            currentWeapon: 0,
+            dungeon: 1,
+            playerPoints: 0,
+            playerFinalPoints: 0,
+            currentTime: 0,
+            stopGame: true,
+            gameWrapperStyling: "completeGameWrapper",
+            gameRestarted: true,
+            popupContent: null
+        }, () => this.setState({
+                gameRestarted: false,
+                stopGame: false
+            }, () => this.setCurrentTime()));
+
+        this.refs.theRefActualGame._reloadMap();    
+  
+    };
+    
+    handleGameWrapperStylingChange(referenceGameObj){
+        referenceGameObj.setState({
+            gameWrapperStyling: "completeGameWrapper completeGameWrapperAnimation"
+        }, () => setTimeout(() => referenceGameObj.setState({
+            gameWrapperStyling: "completeGameWrapper"
+        }), 100)); 
+        
     }
     
     
     render(){
         if(ROT.isSupported()){
             return(
-                    <div className="completeGameWrapper" id="completeGameWrapperId">
+                    <div className={this.state.gameWrapperStyling} id="completeGameWrapperId" ref="compGameWrapper">
                         <Stats key="theStats" 
                                ref="theRefStats" 
                                currentWeapon={this.state.weapons[this.state.currentWeapon]} 
@@ -747,7 +868,8 @@ class Game extends React.Component{
                                dungeon={this.state.dungeon}
                                playerPoints={this.state.playerPoints}
                                currentTime={this.state.currentTime}
-                               playerFinalPoints={this.state.playerFinalPoints}/>
+                               playerFinalPoints={this.state.playerFinalPoints}
+                               gameRestarted={this.state.gameRestarted}/>
                         <Map key="theActualGame" 
                              ref="theRefActualGame" 
                              currentWeapon={this.state.weapons[this.state.currentWeapon]} 
@@ -756,10 +878,16 @@ class Game extends React.Component{
                              onPlayerFight={this.handlePlayerFight} 
                              dungeon={this.state.dungeon}
                              onNewDungeon={this.jumpToNewDungeon}
+                             onGameWrapperStylingChange={this.handleGameWrapperStylingChange}
+                             onFinalEnemyKilled={this.handleFinalEnemyKilled}
                              playerPoints={this.state.playerPoints}
-                             handlePlayerPointsUp={this.handlePlayerPointsUp}/>
-                       <button onClick={this.stopGame.bind(this)}>Stop that Game</button>
+                             gameRestarted={this.state.gameRestarted}/>
+                       <button onClick={this.stopGame.bind(this)}>Stop Game</button>
+                       <div className="popup">
+                           <span className="popuptext" ref="endOfGamePop">{this.state.endOfGameState}<button onClick={this.restartThisGame.bind(this)}>Restart Game</button></span>
+                       </div>
                     </div>
+
             );
         }
         else{
