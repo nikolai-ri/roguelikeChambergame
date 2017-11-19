@@ -19,10 +19,6 @@ button {
  	z-index: 5;	
  }
  
- .hidden{
- 	display: none!important;
- }
- 
  #startGameButton{
  	display: inline-block;
  	width: 15%;
@@ -36,8 +32,8 @@ button {
  	align-content: center;
     flex-direction: column;
     justify-content: center;
-    width: 95vw;
-    height: 95vh;
+    width: 100vw;
+    height: 100vh;
     top: 0px;
  }
  
